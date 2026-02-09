@@ -13,6 +13,17 @@ const NAKAMA_CONFIG = {
   serverKey: import.meta.env.VITE_NAKAMA_SERVER_KEY || ''
 };
 
+// Log config in production to help debug (host/port are not sensitive)
+if (import.meta.env.PROD) {
+  console.log('[NakamaService] Config loaded:', {
+    scheme: NAKAMA_CONFIG.scheme,
+    host: NAKAMA_CONFIG.host || '(not set)',
+    port: NAKAMA_CONFIG.port,
+    hasServerKey: !!NAKAMA_CONFIG.serverKey,
+    envHost: import.meta.env.VITE_NAKAMA_HOST || '(not set)'
+  });
+}
+
 // Collection name for storing project data
 const COLLECTION = 'zhong_projects';
 
@@ -42,6 +53,15 @@ class NakamaService {
     try {
       const { Client } = await import('@heroiclabs/nakama-js');
 
+      const nakamaUrl = `${NAKAMA_CONFIG.scheme}://${NAKAMA_CONFIG.host}:${NAKAMA_CONFIG.port}`;
+      console.log('[NakamaService] Initializing client:', {
+        url: nakamaUrl,
+        host: NAKAMA_CONFIG.host,
+        port: NAKAMA_CONFIG.port,
+        scheme: NAKAMA_CONFIG.scheme,
+        hasServerKey: !!NAKAMA_CONFIG.serverKey
+      });
+
       this.client = new Client(
         NAKAMA_CONFIG.serverKey,
         NAKAMA_CONFIG.host,
@@ -50,9 +70,9 @@ class NakamaService {
       );
       
       this.isInitialized = true;
-      console.log('[NakamaService] Initialized');
+      console.log('[NakamaService] ✅ Initialized successfully');
     } catch (error) {
-      console.error('[NakamaService] Failed to initialize:', error);
+      console.error('[NakamaService] ❌ Failed to initialize:', error);
       throw error;
     }
   }
@@ -116,6 +136,9 @@ class NakamaService {
     }
 
     try {
+      const nakamaUrl = `${NAKAMA_CONFIG.scheme}://${NAKAMA_CONFIG.host}:${NAKAMA_CONFIG.port}`;
+      console.log('[NakamaService] Attempting email auth to:', nakamaUrl);
+      
       // Nakama JS SDK signature: authenticateEmail(email, password, create, username, vars)
       this.session = await this.client.authenticateEmail(email, password, create, username);
       console.log('[NakamaService] ✅ User authenticated:', {
@@ -128,12 +151,17 @@ class NakamaService {
       });
       return this.session;
     } catch (error) {
-      console.error('[NakamaService] ❌ Email authentication failed:', error);
+      console.error('[NakamaService] ❌ Email authentication failed:', {
+        error: error.message || error,
+        url: `${NAKAMA_CONFIG.scheme}://${NAKAMA_CONFIG.host}:${NAKAMA_CONFIG.port}`,
+        host: NAKAMA_CONFIG.host,
+        port: NAKAMA_CONFIG.port
+      });
       // Provide more helpful error message
       if (error.message) {
         throw new Error(error.message);
       }
-      throw new Error('Email authentication failed. Please check your credentials.');
+      throw new Error('Email authentication failed. Please check your credentials and ensure the Nakama server is accessible.');
     }
   }
 
