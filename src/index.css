@@ -1,0 +1,93 @@
+:root {
+  --bg-color: #0d0d0d;
+  --text-color: #f0f0f0;
+  --accent-gold: #ffd700;
+  --yin-color: #1a1a1a;
+  --yang-color: #e0e0e0;
+  --hex-size: 50px;
+  --hex-gap: 4px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.hex-grid-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  perspective: 1000px;
+}
+
+.hex-item {
+  position: absolute;
+  width: var(--hex-size);
+  height: var(--hex-size);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  cursor: pointer;
+  border-radius: 50%;
+  /* Using circles as per requirement "circles stacked up" */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.hex-item:hover {
+  transform: scale(1.2);
+  z-index: 10;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+}
+
+.hex-content {
+  font-size: 0.6rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.info-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 300px;
+  max-height: calc(100vh - 40px); /* Constrain to viewport height */
+  height: calc(100vh - 40px); /* Fixed height to ensure proper scrolling */
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 200;
+  overflow: hidden; /* Hide overflow on panel itself */
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box; /* Include padding in height calculation */
+}
