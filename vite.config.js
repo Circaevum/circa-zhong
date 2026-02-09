@@ -8,9 +8,10 @@ export default defineConfig({
     react(),
     sessionSyncPlugin()
   ],
-  // GitHub Pages base path - update this to match your repository name
-  // If repo is "Zhong", use "/Zhong/". If it's the root of username.github.io, use "/"
-  base: process.env.NODE_ENV === 'production' ? '/Zhong/' : '/',
+  // GitHub Pages base path - must match your repository name
+  // Repo "circa-zhong" → URL is username.github.io/circa-zhong/ so base is "/circa-zhong/"
+  // If it's the root of username.github.io, use "/"
+  base: process.env.NODE_ENV === 'production' ? '/circa-zhong/' : '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
