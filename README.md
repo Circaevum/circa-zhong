@@ -18,7 +18,13 @@
 
 ### GitHub Pages
 
-The app deploys to GitHub Pages via the `Deploy to GitHub Pages` workflow. To use Nakama there (so the hosted site can sync):
+The app deploys via the **Deploy to GitHub Pages** workflow (it runs `npm run build` and deploys the `dist/` output). For the site to work, **Pages must use that workflow**, not the raw branch:
+
+1. Repo **Settings → Pages** (under "Code and automation").
+2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not "Deploy from a branch").  
+   If it’s set to a branch, GitHub serves the source files and the app stays blank.
+
+To use Nakama on the live site (so the hosted app can sync):
 
 - **Variables:** `VITE_NAKAMA_HOST`, `VITE_NAKAMA_PORT`, `VITE_NAKAMA_SCHEME`
 - **Secret:** `VITE_NAKAMA_SERVER_KEY`

@@ -43,6 +43,9 @@ jobs:
           VITE_NAKAMA_PORT: ${{ vars.VITE_NAKAMA_PORT || '7350' }}
           VITE_NAKAMA_SERVER_KEY: ${{ secrets.VITE_NAKAMA_SERVER_KEY }}
 
+      - name: Create .nojekyll
+        run: touch dist/.nojekyll
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
