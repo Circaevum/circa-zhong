@@ -1,33 +1,30 @@
-# Zhong
+# Zhong (中)
 
-Session management and token tracking for Circaevum Zhong administration hub.
+**Quarterly development dashboard** for Circaevum — a hex-grid hub for projects, versions, and session tracking. The center hex is Zhong (executive oversight); the rest are YANG/YIN projects with IDs, status, and a **Worldline** (feature history).
 
-## Setup
+## What it does
 
-1. Copy `.env.example` to `.env`
-2. Fill in your Nakama server details:
-   - `VITE_NAKAMA_HOST` - Your Nakama server hostname
-   - `VITE_NAKAMA_SERVER_KEY` - Your Nakama server key
-   - `VITE_NAKAMA_PORT` - Port (default: 7350)
-   - `VITE_NAKAMA_SCHEME` - http or https (default: http)
+- **Hex grid** — One center (Zhong) plus 36 project slots in rings. Each slot has a type (Web, Database, API, Unity, etc.), status, and optional **project code** (e.g. `26Q1W22` = 2026 Q1, Web, project 22).
+- **Worldline** — Per-project timeline of updates: version strings (`c26Q1F121`), commit, repo path, description. Add knots as you ship.
+- **Session & token tracking** — In development, syncs with Cursor session data; per-project token stats show up in the panel.
+- **Sync** — Use it **local-only** (device auth, no account) or **sign in with email** to sync projects to Nakama so the same data appears everywhere (including GitHub Pages if you wire it up).
 
-Without a valid `.env`, the Nakama sync and email login features will not work.
+## Running it
+
+### Local
+
+1. `npm install` then `npm run dev`.
+2. Optional: copy `.env.example` to `.env` and set `VITE_NAKAMA_HOST`, `VITE_NAKAMA_SERVER_KEY` (and optionally `VITE_NAKAMA_SCHEME`, `VITE_NAKAMA_PORT`). Without these, the app runs in local-only mode (no cloud sync, no email login).
+
+### GitHub Pages
+
+The app deploys to GitHub Pages via the `Deploy to GitHub Pages` workflow. To use Nakama there (so the hosted site can sync):
+
+- **Variables:** `VITE_NAKAMA_HOST`, `VITE_NAKAMA_PORT`, `VITE_NAKAMA_SCHEME`
+- **Secret:** `VITE_NAKAMA_SERVER_KEY`
+
+Add them under **Settings → Secrets and variables → Actions**. If you don’t set them, the live site still works in local-only mode.
 
 ---
 
-## React + Vite
-
-This project uses React + Vite. The template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Built with React and Vite.

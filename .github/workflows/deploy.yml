@@ -36,6 +36,12 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          # Optional: set in repo Settings → Secrets and variables → Actions
+          # so the built app can use Nakama without committing .env
+          VITE_NAKAMA_SCHEME: ${{ vars.VITE_NAKAMA_SCHEME || 'http' }}
+          VITE_NAKAMA_HOST: ${{ vars.VITE_NAKAMA_HOST }}
+          VITE_NAKAMA_PORT: ${{ vars.VITE_NAKAMA_PORT || '7350' }}
+          VITE_NAKAMA_SERVER_KEY: ${{ secrets.VITE_NAKAMA_SERVER_KEY }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

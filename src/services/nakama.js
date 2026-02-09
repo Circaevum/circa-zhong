@@ -21,22 +21,25 @@ class NakamaService {
     this.client = null;
     this.session = null;
     this.isInitialized = false;
+    /** When true, no Nakama server is configured (e.g. GitHub Pages); app runs in local-only mode */
+    this.offlineMode = false;
   }
 
   /**
-   * Initialize Nakama client (lazy load the SDK)
+   * Initialize Nakama client (lazy load the SDK).
+   * If VITE_NAKAMA_HOST / VITE_NAKAMA_SERVER_KEY are missing, runs in offline mode (no throw).
    */
   async init() {
-    if (this.isInitialized) return;
+    if (this.isInitialized || this.offlineMode) return;
 
     if (!NAKAMA_CONFIG.host || !NAKAMA_CONFIG.serverKey) {
-      const msg = '[NakamaService] Missing configuration. Copy .env.example to .env and set VITE_NAKAMA_HOST and VITE_NAKAMA_SERVER_KEY.';
-      console.error(msg);
-      throw new Error(msg);
+      console.warn('[NakamaService] No server config (VITE_NAKAMA_HOST / VITE_NAKAMA_SERVER_KEY). Running in local-only mode.');
+      this.offlineMode = true;
+      this.isInitialized = true;
+      return;
     }
 
     try {
-      // Dynamically import Nakama JS SDK
       const { Client } = await import('@heroiclabs/nakama-js');
 
       this.client = new Client(
@@ -55,14 +58,30 @@ class NakamaService {
   }
 
   /**
-   * Authenticate with device ID (anonymous/device session)
+   * Authenticate with device ID (anonymous/device session).
+   * In offline mode, returns a fake session so the app can render (local-only).
    */
   async authenticateDevice(deviceId = null) {
-    if (!this.isInitialized) await this.init();
-    
+    if (!this.isInitialized && !this.offlineMode) await this.init();
+
+    if (this.offlineMode) {
+      deviceId = deviceId || localStorage.getItem('zhong_device_id') ||
+                 `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('zhong_device_id', deviceId);
+      const expireTime = Math.floor(Date.now() / 1000) + 365 * 24 * 3600; // 1 year
+      this.session = {
+        user_id: `offline_${deviceId.replace(/[^a-z0-9]/gi, '').slice(0, 16)}`,
+        username: 'Local Device',
+        token: 'offline',
+        expire_time: expireTime,
+        isexpired: () => false
+      };
+      console.log('[NakamaService] ✅ Offline mode – local session');
+      return this.session;
+    }
+
     if (!deviceId) {
-      // Generate or retrieve device ID from localStorage
-      deviceId = localStorage.getItem('zhong_device_id') || 
+      deviceId = localStorage.getItem('zhong_device_id') ||
                  `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       localStorage.setItem('zhong_device_id', deviceId);
     }
@@ -91,7 +110,10 @@ class NakamaService {
    * @param {string} username - Optional username (only used when creating account)
    */
   async authenticateEmail(email, password, create = false, username = null) {
-    if (!this.isInitialized) await this.init();
+    if (!this.isInitialized && !this.offlineMode) await this.init();
+    if (this.offlineMode) {
+      throw new Error('Cloud sync is not configured. Run the app with VITE_NAKAMA_HOST and VITE_NAKAMA_SERVER_KEY set to use email login.');
+    }
 
     try {
       // Nakama JS SDK signature: authenticateEmail(email, password, create, username, vars)
@@ -137,6 +159,7 @@ class NakamaService {
    * Load projects from Nakama storage
    */
   async loadProjects() {
+    if (this.offlineMode) return null;
     if (!this.isAuthenticated()) {
       throw new Error('Not authenticated. Please login first.');
     }
@@ -171,6 +194,7 @@ class NakamaService {
    * Save projects to Nakama storage
    */
   async saveProjects(projects) {
+    if (this.offlineMode) return true;
     if (!this.isAuthenticated()) {
       throw new Error('Not authenticated. Please login first.');
     }
