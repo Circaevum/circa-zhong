@@ -38,6 +38,35 @@ async function logStorageErrorResponse(error) {
   }
 }
 
+/** Max history entries per project and max description length to keep cloud payload under Nakama body size limit */
+const CLOUD_HISTORY_CAP = 20;
+const CLOUD_DESCRIPTION_MAX = 120;
+
+/** Build a slim projects payload for cloud storage to avoid "request body too large" (400). */
+function slimProjectsForCloud(projects) {
+  const list = Array.isArray(projects) ? projects : (projects?.projects || []);
+  const slim = list.map(p => {
+    const history = Array.isArray(p.history) ? p.history.slice(0, CLOUD_HISTORY_CAP) : [];
+    return {
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      status: p.status,
+      description: typeof p.description === 'string' ? p.description.slice(0, 500) : (p.description || ''),
+      projectCode: p.projectCode,
+      history: history.map(k => ({
+        version: k.version,
+        date: k.date,
+        commit: (k.commit || '').slice(0, 80),
+        repo: (k.repo || '').slice(0, 80),
+        timestamp: k.timestamp,
+        description: typeof k.description === 'string' ? k.description.slice(0, CLOUD_DESCRIPTION_MAX) : (k.description || '')
+      }))
+    };
+  });
+  return { projects: slim, _version: Date.now().toString(), _synced: new Date().toISOString() };
+}
+
 class NakamaService {
   constructor() {
     this.client = null;
@@ -241,19 +270,16 @@ class NakamaService {
     }
 
     try {
-      // Ensure projects is in the correct format and JSON-serializable (no undefined/functions)
-      const raw = Array.isArray(projects)
-        ? { projects: projects, _version: Date.now().toString(), _synced: new Date().toISOString() }
-        : projects;
-      const projectsData = JSON.parse(JSON.stringify(raw));
+      // Use slim payload (capped history, truncated strings) to avoid "request body too large" 400
+      const slim = slimProjectsForCloud(projects);
+      const projectsData = JSON.parse(JSON.stringify(slim));
 
-      // SDK expects value as object; it will JSON.stringify internally (passing a string causes double-encode → 400)
       await this.client.writeStorageObjects(this.session, [{
         collection: COLLECTION,
         key: 'projects',
         value: projectsData,
-        permission_read: 1, // Owner read
-        permission_write: 1  // Owner write
+        permission_read: 1,
+        permission_write: 1
       }]);
 
       console.log('[NakamaService] Projects saved to Nakama', {
