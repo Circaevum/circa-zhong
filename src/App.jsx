@@ -53,6 +53,7 @@ function App() {
   const [sessionSyncKey, setSessionSyncKey] = useState(0); // Force SessionStats to refresh
   const [pushStatus, setPushStatus] = useState(null); // 'pushing' | 'pushed' | 'error' | null
   const [cloudSyncKey, setCloudSyncKey] = useState(0); // Increment to force refetch analytics after Cloud Sync
+  const [initialCloudSyncDone, setInitialCloudSyncDone] = useState(false); // Avoid saving to Nakama before first sync (prevents 400 on deployed)
 
   // Initialize from LocalStorage or fall back to default
   // Ensure all projects have projectCode
@@ -371,28 +372,28 @@ function App() {
       const syncedProjects = await nakamaService.syncProjects(projectsData);
       setProjectsData(syncedProjects);
       setSyncStatus('synced');
+      setInitialCloudSyncDone(true);
     } catch (error) {
       console.error('[App] Sync failed:', error);
       setSyncStatus('error');
-      // Continue with local data
+      setInitialCloudSyncDone(true); // Allow saves even after error so edits can retry
     }
   };
 
-  // Persist changes to Nakama (only when email-authenticated)
+  // Persist changes to Nakama (only when email-authenticated and after first sync)
   useEffect(() => {
-    // Only save if email-authenticated - no local-only mode
-    if (isEmailAuthenticated && nakamaService.isAuthenticated()) {
-      // Save to Nakama
-      nakamaService.saveProjects(projectsData).catch(error => {
-        console.error('[App] Failed to save to Nakama:', error);
-        setSyncStatus('error');
-      });
-      
-      // Also save to localStorage as backup/cache
-      localStorage.setItem('zhong_projects', JSON.stringify(projectsData));
-      localStorage.setItem('zhong_projects_version', Date.now().toString());
-    }
-  }, [projectsData, isEmailAuthenticated]);
+    if (!isEmailAuthenticated || !nakamaService.isAuthenticated()) return;
+    // Wait for initial cloud sync so we don't overwrite cloud with default/local data on first load (prevents 400 on deployed)
+    if (!initialCloudSyncDone) return;
+
+    nakamaService.saveProjects(projectsData).catch(error => {
+      console.error('[App] Failed to save to Nakama:', error);
+      setSyncStatus('error');
+    });
+
+    localStorage.setItem('zhong_projects', JSON.stringify(projectsData));
+    localStorage.setItem('zhong_projects_version', Date.now().toString());
+  }, [projectsData, isEmailAuthenticated, initialCloudSyncDone]);
 
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [theme, setTheme] = useState('burgundy_royal');

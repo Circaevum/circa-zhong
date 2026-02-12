@@ -28,6 +28,16 @@ if (import.meta.env.PROD) {
 const COLLECTION = 'zhong_projects';
 const COLLECTION_SESSION_ANALYTICS = 'zhong_session_analytics';
 
+/** Log body of a failed fetch Response for debugging 400/406 etc. */
+async function logStorageErrorResponse(error) {
+  if (error && typeof error.text === 'function') {
+    try {
+      const text = await error.text();
+      console.error('[NakamaService] Storage error response body:', text || '(empty)');
+    } catch (_) {}
+  }
+}
+
 class NakamaService {
   constructor() {
     this.client = null;
@@ -231,11 +241,12 @@ class NakamaService {
     }
 
     try {
-      // Ensure projects is in the correct format
-      const projectsData = Array.isArray(projects)
+      // Ensure projects is in the correct format and JSON-serializable (no undefined/functions)
+      const raw = Array.isArray(projects)
         ? { projects: projects, _version: Date.now().toString(), _synced: new Date().toISOString() }
         : projects;
-      
+      const projectsData = JSON.parse(JSON.stringify(raw));
+
       // SDK expects value as object; it will JSON.stringify internally (passing a string causes double-encode → 400)
       await this.client.writeStorageObjects(this.session, [{
         collection: COLLECTION,
@@ -246,12 +257,13 @@ class NakamaService {
       }]);
 
       console.log('[NakamaService] Projects saved to Nakama', {
-        projectCount: Array.isArray(projects) ? projects.length : (projects.projects?.length || 0),
+        projectCount: projectsData.projects?.length ?? 0,
         version: projectsData._version
       });
       return true;
     } catch (error) {
       console.error('[NakamaService] Failed to save projects:', error);
+      logStorageErrorResponse(error);
       throw error;
     }
   }
@@ -304,6 +316,7 @@ class NakamaService {
       }
     } catch (error) {
       console.error('[NakamaService] Sync failed:', error);
+      logStorageErrorResponse(error);
       // Return local on error (offline mode)
       return Array.isArray(localProjects) ? localProjects : (localProjects.projects || localProjects);
     }
@@ -328,13 +341,14 @@ class NakamaService {
       await this.client.writeStorageObjects(this.session, [{
         collection: COLLECTION_SESSION_ANALYTICS,
         key: projectCode,
-        value,
+        value: JSON.parse(JSON.stringify(value)),
         permission_read: 1,
         permission_write: 1
       }]);
       return true;
     } catch (error) {
       console.error('[NakamaService] Failed to save session analytics:', error);
+      logStorageErrorResponse(error);
       return false;
     }
   }
