@@ -24,8 +24,9 @@ if (import.meta.env.PROD) {
   });
 }
 
-// Collection name for storing project data
+// Collection names
 const COLLECTION = 'zhong_projects';
+const COLLECTION_SESSION_ANALYTICS = 'zhong_session_analytics';
 
 class NakamaService {
   constructor() {
@@ -132,7 +133,9 @@ class NakamaService {
   async authenticateEmail(email, password, create = false, username = null) {
     if (!this.isInitialized && !this.offlineMode) await this.init();
     if (this.offlineMode) {
-      throw new Error('Cloud sync is not configured. Run the app with VITE_NAKAMA_HOST and VITE_NAKAMA_SERVER_KEY set to use email login.');
+      throw new Error(
+        'Cloud sync is not configured. Copy .env.example to .env in the circa-zhong folder, set VITE_NAKAMA_HOST and VITE_NAKAMA_SERVER_KEY to your Nakama server, then restart the dev server (npm run dev).'
+      );
     }
 
     try {
@@ -306,6 +309,62 @@ class NakamaService {
       console.error('[NakamaService] Sync failed:', error);
       // Return local on error (offline mode)
       return Array.isArray(localProjects) ? localProjects : (localProjects.projects || localProjects);
+    }
+  }
+
+  /**
+   * Save session analytics for a project (prompts, token counts). Only used when email-authenticated.
+   * @param {string} projectCode - e.g. '26Q1W01'
+   * @param {Object} payload - { totalTokens, totalPrompts, sessionCount, sessions: [...], lastUpdated }
+   */
+  async saveSessionAnalytics(projectCode, payload) {
+    if (this.offlineMode || !this.isAuthenticated() || !projectCode || !payload) return false;
+    try {
+      const value = JSON.stringify({
+        projectCode,
+        totalTokens: payload.totalTokens ?? 0,
+        totalPrompts: payload.totalPrompts ?? 0,
+        sessionCount: payload.sessionCount ?? 0,
+        sessions: payload.sessions ?? [],
+        lastUpdated: payload.lastUpdated ?? new Date().toISOString()
+      });
+      await this.client.writeStorageObjects(this.session, [{
+        collection: COLLECTION_SESSION_ANALYTICS,
+        key: projectCode,
+        value,
+        userId: this.session.user_id,
+        permissionRead: 1,
+        permissionWrite: 1
+      }]);
+      return true;
+    } catch (error) {
+      console.error('[NakamaService] Failed to save session analytics:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Load session analytics for a project (for showing token/prompt counts on dots).
+   * @param {string} projectCode - e.g. '26Q1W01'
+   * @returns {Object|null} { totalTokens, totalPrompts, sessionCount, sessions, lastUpdated } or null
+   */
+  async loadSessionAnalytics(projectCode) {
+    if (this.offlineMode || !this.isAuthenticated() || !projectCode) return null;
+    try {
+      const result = await this.client.readStorageObjects(this.session, {
+        objectIds: [{
+          collection: COLLECTION_SESSION_ANALYTICS,
+          key: projectCode,
+          userId: this.session.user_id
+        }]
+      });
+      if (result?.objects?.length > 0) {
+        return JSON.parse(result.objects[0].value);
+      }
+      return null;
+    } catch (error) {
+      console.error('[NakamaService] Failed to load session analytics:', error);
+      return null;
     }
   }
 

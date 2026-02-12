@@ -160,9 +160,15 @@ export default function LoginModal({ isOpen, onClose, onAuthenticated }) {
               border: '1px solid rgba(255,0,0,0.5)',
               borderRadius: '6px',
               color: '#ff6b6b',
-              fontSize: '0.9rem'
+              fontSize: '0.9rem',
+              whiteSpace: 'pre-wrap'
             }}>
               {error}
+              {error.includes('Cloud sync is not configured') && (
+                <div style={{ marginTop: '8px', fontSize: '0.85rem', opacity: 0.9 }}>
+                  You can still use the app with device session (no login); card edits will be local only.
+                </div>
+              )}
             </div>
           )}
 

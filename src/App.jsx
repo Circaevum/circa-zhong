@@ -7,6 +7,41 @@ import { nakamaService } from './services/nakama';
 import LoginModal from './components/LoginModal';
 import SessionStats from './components/SessionStats';
 import { generateProjectId, parseProjectId } from './utils/project-id';
+import { getSessions, getSessionStats } from './utils/session-manager';
+
+/** Push session analytics (tokens, prompts) to Nakama per projectCode. Only for email-authenticated users. */
+async function pushSessionAnalyticsToNakama() {
+  if (!nakamaService.isAuthenticated() || nakamaService.offlineMode) return;
+  if (localStorage.getItem('zhong_auth_type') !== 'email') return;
+  try {
+    const raw = localStorage.getItem('cursor_sessions');
+    const sessions = raw ? JSON.parse(raw) : [];
+    const byCode = {};
+    sessions.forEach(s => {
+      const code = s.projectCode || 'unknown';
+      if (!byCode[code]) byCode[code] = [];
+      byCode[code].push(s);
+    });
+    for (const [projectCode, list] of Object.entries(byCode)) {
+      if (projectCode === 'unknown') continue;
+      const stats = getSessionStats({ projectCode });
+      let totalPrompts = 0;
+      list.forEach(s => {
+        if (s.promptGroups && Array.isArray(s.promptGroups)) totalPrompts += s.promptGroups.length;
+        else if (s.tokenEntries?.length) totalPrompts += 1;
+      });
+      await nakamaService.saveSessionAnalytics(projectCode, {
+        totalTokens: stats.totalTokens ?? 0,
+        totalPrompts,
+        sessionCount: list.length,
+        sessions: list.map(s => ({ id: s.id, totalTokens: s.totalTokens, startTime: s.startTime, endTime: s.endTime, description: s.description })),
+        lastUpdated: new Date().toISOString()
+      });
+    }
+  } catch (e) {
+    console.warn('[App] Push session analytics to Nakama failed:', e);
+  }
+}
 
 function App() {
   // Authentication state
@@ -16,6 +51,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState('local'); // 'local' | 'synced' | 'syncing' | 'error'
   const [sessionSyncKey, setSessionSyncKey] = useState(0); // Force SessionStats to refresh
+  const [pushStatus, setPushStatus] = useState(null); // 'pushing' | 'pushed' | 'error' | null
 
   // Initialize from LocalStorage or fall back to default
   // Ensure all projects have projectCode
@@ -363,6 +399,8 @@ function App() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [showHistory, setShowHistory] = useState(false); // Toggle for Worldline view
+  /** Session analytics (tokens, prompts) per projectCode for showing on hex dots */
+  const [sessionStatsByProjectCode, setSessionStatsByProjectCode] = useState({});
 
   // New Update Form State
   const [newUpdate, setNewUpdate] = useState({ description: '', commit: '', repo: '', timestamp: '' });
@@ -375,7 +413,50 @@ function App() {
   });
 
   const selectedProject = projectsData.find(p => p.id === selectedProjectId);
-  
+
+  // Load session analytics from Nakama for all projects so we can show token/prompt counts on dots
+  useEffect(() => {
+    if (!nakamaService.isAuthenticated() || nakamaService.offlineMode) return;
+    const codes = [...new Set(projectsData.map(p => p.projectCode).filter(Boolean))];
+    if (codes.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const next = {};
+      for (const code of codes) {
+        if (cancelled) return;
+        const data = await nakamaService.loadSessionAnalytics(code);
+        if (data && (data.totalTokens > 0 || data.totalPrompts > 0)) next[code] = data;
+      }
+      if (!cancelled) setSessionStatsByProjectCode(prev => ({ ...prev, ...next }));
+    })();
+    return () => { cancelled = true; };
+  }, [projectsData, isAuthenticated]);
+
+  // In dev, merge in session stats from localStorage (cursor_sessions) so dots update right after Sync Sessions
+  const localStatsForDots = React.useMemo(() => {
+    if (!import.meta.env.DEV) return {};
+    try {
+      const raw = localStorage.getItem('cursor_sessions');
+      if (!raw) return {};
+      const sessions = JSON.parse(raw);
+      const byCode = {};
+      sessions.forEach(s => {
+        const code = s.projectCode;
+        if (!code || code === 'unknown') return;
+        if (!byCode[code]) byCode[code] = { totalTokens: 0, totalPrompts: 0, sessionCount: 0 };
+        byCode[code].sessionCount += 1;
+        byCode[code].totalTokens += Number(s.totalTokens) || 0;
+        if (s.promptGroups && Array.isArray(s.promptGroups)) byCode[code].totalPrompts += s.promptGroups.length;
+        else if (s.tokenEntries?.length) byCode[code].totalPrompts += 1;
+      });
+      return byCode;
+    } catch {
+      return {};
+    }
+  }, [sessionSyncKey]);
+
+  const statsForGrid = { ...sessionStatsByProjectCode, ...localStatsForDots };
+
   // Calculate YANG/YIN type based on position (matching HexGrid logic)
   const getPositionType = (projectId) => {
     if (projectId === 0) return 'ZHONG';
@@ -607,15 +688,30 @@ function App() {
         }}>
           <div>
             <span>Status: {isEmailAuthenticated 
-              ? (syncStatus === 'synced' ? '✓ Synced' : syncStatus === 'syncing' ? '⟳ Syncing...' : syncStatus === 'error' ? '⚠ Offline' : '📱 Local')
+              ? (syncStatus === 'synced' ? '✓ Synced' : syncStatus === 'syncing' ? '⟳ Syncing...' : syncStatus === 'error' ? '⚠ Offline' : '✓ Verified – you can edit cards')
               : isAuthenticated 
                 ? '🔐 Device Session'
                 : '📱 Offline'}
             </span>
           </div>
+          {isEmailAuthenticated && (
+            <div style={{ marginTop: '2px' }}>
+              <span style={{ opacity: 0.8 }}>Verified account – card edits sync to your account</span>
+            </div>
+          )}
           {isAuthenticated && !isEmailAuthenticated && (
             <div style={{ marginTop: '2px' }}>
-              <span>(Local Only - Changes won't sync)</span>
+              <span>(Local only – log in to edit and sync)</span>
+            </div>
+          )}
+          {!isEmailAuthenticated && (isAuthenticated || nakamaService.offlineMode) && (
+            <div style={{ marginTop: '2px' }}>
+              <span style={{ opacity: 0.85 }}>Log in with your account to see session stats (tokens, prompts) from other devices.</span>
+            </div>
+          )}
+          {nakamaService.offlineMode && (
+            <div style={{ marginTop: '2px' }}>
+              <span style={{ opacity: 0.7 }}>Cloud not configured for this build – set VITE_NAKAMA_HOST and VITE_NAKAMA_SERVER_KEY when building to see stats on the public site.</span>
             </div>
           )}
           {isAuthenticated && !isEmailAuthenticated && (
@@ -656,7 +752,7 @@ function App() {
                   fontWeight: 'bold'
                 }}
               >
-                Login to Edit
+                Log in to edit cards
               </button>
             )}
             {import.meta.env.DEV && (
@@ -675,6 +771,40 @@ function App() {
                 title="Sync sessions from file system"
               >
                 🔄 Sync Sessions
+              </button>
+            )}
+            {isEmailAuthenticated && import.meta.env.DEV && (
+              <button
+                onClick={async () => {
+                  if (nakamaService.offlineMode) {
+                    setPushStatus('error');
+                    setTimeout(() => setPushStatus(null), 3000);
+                    return;
+                  }
+                  setPushStatus('pushing');
+                  try {
+                    await pushSessionAnalyticsToNakama();
+                    setPushStatus('pushed');
+                    setTimeout(() => setPushStatus(null), 3000);
+                  } catch (e) {
+                    setPushStatus('error');
+                    setTimeout(() => setPushStatus(null), 3000);
+                  }
+                }}
+                style={{
+                  background: pushStatus === 'pushed' ? 'rgba(76,175,80,0.3)' : pushStatus === 'error' ? 'rgba(244,67,54,0.3)' : 'transparent',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: '#fff',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  cursor: pushStatus === 'pushing' ? 'wait' : 'pointer',
+                  fontSize: '0.7rem',
+                  marginLeft: '5px'
+                }}
+                title="Push session stats (tokens, prompts) to your account so they show on the public site"
+                disabled={pushStatus === 'pushing'}
+              >
+                {pushStatus === 'pushing' ? '⟳ Pushing...' : pushStatus === 'pushed' ? '✓ Pushed to cloud' : pushStatus === 'error' ? (nakamaService.offlineMode ? '✗ Cloud not configured' : '✗ Push failed') : '☁ Push to cloud'}
               </button>
             )}
           </div>
@@ -818,6 +948,7 @@ function App() {
         currentTheme={theme}
         swapBackgrounds={swapBackgrounds}
         swapDots={swapDots}
+        sessionStatsByProjectCode={statsForGrid}
       />
 
       <AnimatePresence>

@@ -30,7 +30,14 @@ function hexToPixel(q, r, size) {
     return { x, y };
 }
 
-const HexGrid = ({ projects: inputProjects, onSelectProject, currentTheme = 'default', swapBackgrounds = false, swapDots = false }) => {
+/** Format token count for display on dot */
+function formatTokens(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+}
+
+const HexGrid = ({ projects: inputProjects, onSelectProject, currentTheme = 'default', swapBackgrounds = false, swapDots = false, sessionStatsByProjectCode = {} }) => {
     const hexSize = 60; // Spacing size
     const circleSize = 50; // Visual size
     const coords = useMemo(() => generateSpiral(3), []);
@@ -407,15 +414,29 @@ const HexGrid = ({ projects: inputProjects, onSelectProject, currentTheme = 'def
                         whileHover={isGhost ? { scale: 1.1, opacity: ghostOpacity + 0.1 } : currentTheme === 'cosmic' ? { scale: 1.15, filter: 'drop-shadow(0 0 12px currentColor)' } : { scale: 1.1 }}
                     >
                         {isGhost ? (
-                            <span style={{ 
-                                fontSize: '20px', 
-                                fontWeight: 'bold',
-                                color: 'rgba(255,255,255,0.6)',
-                                lineHeight: '1'
-                            }}>+</span>
-                        ) : (
-                            proj.id === 0 && <span style={{ fontSize: '10px', fontWeight: 'bold' }}>中</span>
-                        )}
+                            <span style={{ fontSize: '20px', fontWeight: 'bold', color: 'rgba(255,255,255,0.6)', lineHeight: '1' }}>+</span>
+                        ) : proj.id === 0 ? (
+                            <span style={{ fontSize: '10px', fontWeight: 'bold' }}>中</span>
+                        ) : (() => {
+                            const stats = proj.projectCode ? sessionStatsByProjectCode[proj.projectCode] : null;
+                            if (!stats || (stats.totalTokens === 0 && stats.totalPrompts === 0)) return null;
+                            return (
+                                <span style={{
+                                    fontSize: '7px',
+                                    lineHeight: '1.1',
+                                    textAlign: 'center',
+                                    display: 'block',
+                                    opacity: 0.95,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    maxWidth: '100%',
+                                    padding: '0 2px'
+                                }} title={`${(stats.totalTokens || 0).toLocaleString()} tokens · ${stats.totalPrompts || 0} prompts`}>
+                                    {formatTokens(stats.totalTokens || 0)} · {stats.totalPrompts || 0}
+                                </span>
+                            );
+                        })()}
                     </motion.div>
                 );
             })}

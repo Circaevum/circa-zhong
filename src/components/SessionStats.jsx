@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { getSessions, getSessionStats } from '../utils/session-manager';
 import { getTokenHistory } from '../utils/cursor-token-tracker';
+import { nakamaService } from '../services/nakama';
 
 // Add CSS for smooth scrolling
 const timelineScrollStyles = `
@@ -67,15 +68,13 @@ export default function SessionStats({ projectId, projectCode, projectName, refr
     return null;
   };
 
-  const loadSessionData = () => {
-    // Use projectCode if available, otherwise fall back to projectId
+  const loadSessionData = async () => {
     const filterOptions = projectCode 
       ? { projectCode } 
       : (projectId !== null && projectId !== undefined ? { projectId } : null);
     
     if (filterOptions) {
       try {
-        // Directly read from localStorage to verify what's stored
         const rawStored = localStorage.getItem('cursor_sessions');
         const allStoredSessions = rawStored ? JSON.parse(rawStored) : [];
         const matchingStored = allStoredSessions.filter(s => 
@@ -91,10 +90,26 @@ export default function SessionStats({ projectId, projectCode, projectName, refr
           });
         }
         
-        // Force reload from localStorage by calling getSessions fresh
-        // Clear any cached data first - force a fresh read
-        const projectSessions = getSessions(filterOptions);
-        const projectStats = getSessionStats(filterOptions);
+        let projectSessions = getSessions(filterOptions);
+        let projectStats = getSessionStats(filterOptions);
+        
+        // When no local data, try Nakama (for public Zhong / verified account)
+        if (projectCode && (projectSessions.length === 0 || (projectStats.totalTokens === 0 && !projectStats.totalSessions)) && nakamaService.isAuthenticated() && !nakamaService.offlineMode) {
+          try {
+            const remote = await nakamaService.loadSessionAnalytics(projectCode);
+            if (remote && (remote.sessionCount > 0 || remote.totalTokens > 0)) {
+              projectSessions = (remote.sessions || []).map(s => ({ ...s, totalTokens: s.totalTokens || 0 }));
+              projectStats = {
+                totalSessions: remote.sessionCount ?? 0,
+                totalTokens: remote.totalTokens ?? 0,
+                averageTokens: remote.sessionCount ? (remote.totalTokens ?? 0) / remote.sessionCount : 0,
+                totalPrompts: remote.totalPrompts ?? 0
+              };
+            }
+          } catch (e) {
+            console.log('[SessionStats] Nakama analytics load failed (optional):', e?.message);
+          }
+        }
         
         // Log detailed info about what we're getting
         const sessionTokenDetails = projectSessions.map(s => ({ 
@@ -112,28 +127,22 @@ export default function SessionStats({ projectId, projectCode, projectName, refr
           calculatedTotal: projectSessions.reduce((sum, s) => sum + (Number(s.totalTokens) || 0), 0)
         });
         
-        // Calculate total prompts using stored promptGroups from sync script
-        // Each promptGroup represents one actual prompt (grouped by conversationId+requestId)
-        // Fallback to minute-based grouping if promptGroups not available
-        let totalPrompts = 0;
-        projectSessions.forEach(session => {
-          if (session.promptGroups && Array.isArray(session.promptGroups)) {
-            // Use stored prompt groups (most accurate)
-            totalPrompts += session.promptGroups.length;
-          } else if (session.tokenEntries && session.tokenEntries.length > 0) {
-            // Fallback: group by minute (less accurate but better than counting each entry)
-            const minuteGroups = new Set();
-            session.tokenEntries.forEach(entryId => {
-              const timestampMatch = entryId.match(/entry_(?:estimated_)?(\d+)/);
-              if (timestampMatch) {
-                const timestamp = parseInt(timestampMatch[1]);
-                const minuteKey = Math.floor(timestamp / 60000);
-                minuteGroups.add(minuteKey);
-              }
-            });
-            totalPrompts += minuteGroups.size || 1; // At least 1 prompt if entries exist
-          }
-        });
+        // Total prompts: use remote totalPrompts if set, else compute from local sessions
+        let totalPrompts = Number(projectStats.totalPrompts) || 0;
+        if (totalPrompts === 0) {
+          projectSessions.forEach(session => {
+            if (session.promptGroups && Array.isArray(session.promptGroups)) {
+              totalPrompts += session.promptGroups.length;
+            } else if (session.tokenEntries && session.tokenEntries.length > 0) {
+              const minuteGroups = new Set();
+              session.tokenEntries.forEach(entryId => {
+                const timestampMatch = entryId.match(/entry_(?:estimated_)?(\d+)/);
+                if (timestampMatch) minuteGroups.add(Math.floor(parseInt(timestampMatch[1], 10) / 60000));
+              });
+              totalPrompts += minuteGroups.size || 1;
+            }
+          });
+        }
         const tokensPerPrompt = totalPrompts > 0 ? projectStats.totalTokens / totalPrompts : 0;
         
         // Force state update - create completely new objects/arrays

@@ -31,6 +31,27 @@ To use Nakama on the live site (so the hosted app can sync):
 
 Add them under **Settings → Secrets and variables → Actions**. If you don’t set them, the live site still works in local-only mode.
 
+## Connecting to Nakama
+
+Nakama provides **device auth** (anonymous) and **email sign-in** so projects and worldlines sync across devices. When configured, the app shows **Status: ✓ Synced** in the header.
+
+### Local
+
+- Copy `.env.example` to `.env`.
+- Set at least: `VITE_NAKAMA_HOST`, `VITE_NAKAMA_SERVER_KEY`.
+- Optional: `VITE_NAKAMA_SCHEME` (e.g. `https`), `VITE_NAKAMA_PORT` (e.g. `443`). Defaults are `http` and `7350`.
+
+### Production (GitHub Pages)
+
+- **Variables:** `VITE_NAKAMA_HOST` (e.g. `nakama.circaevum.com`), `VITE_NAKAMA_PORT` (`443`), `VITE_NAKAMA_SCHEME` (`https`).
+- **Secret:** `VITE_NAKAMA_SERVER_KEY` (same key as on the Nakama server).
+- Redeploy after changing Actions variables so the build gets the new values.
+
+### Notes
+
+- **CORS:** The app origin is `https://circaevum.github.io`. The Nakama server (or its reverse proxy) must allow this origin. If both Nakama and the proxy send `Access-Control-Allow-Origin`, the browser will reject the response (“multiple values”). Fix by having the proxy strip Nakama’s CORS headers and send a single origin (see `docs/nginx-cors-snippet.conf` and `docs/NAKAMA-HTTPS-SETUP-PROGRESS.md`).
+- **HTTPS:** Production uses `https://nakama.circaevum.com` (nginx + Let’s Encrypt on the droplet, proxying to Nakama). Full server setup (DNS, cert, nginx, CORS) is documented in `docs/NAKAMA-HTTPS-SETUP-PROGRESS.md`.
+
 ---
 
 Built with React and Vite.
