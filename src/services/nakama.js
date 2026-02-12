@@ -236,16 +236,13 @@ class NakamaService {
         ? { projects: projects, _version: Date.now().toString(), _synced: new Date().toISOString() }
         : projects;
       
-      const value = JSON.stringify(projectsData);
-      
-      // Nakama JS SDK expects an array directly, not an object with 'objects' property
+      // SDK expects value as object; it will JSON.stringify internally (passing a string causes double-encode → 400)
       await this.client.writeStorageObjects(this.session, [{
         collection: COLLECTION,
         key: 'projects',
-        value: value,
-        userId: this.session.user_id,
-        permissionRead: 1, // Owner read
-        permissionWrite: 1  // Owner write
+        value: projectsData,
+        permission_read: 1, // Owner read
+        permission_write: 1  // Owner write
       }]);
 
       console.log('[NakamaService] Projects saved to Nakama', {
@@ -320,21 +317,20 @@ class NakamaService {
   async saveSessionAnalytics(projectCode, payload) {
     if (this.offlineMode || !this.isAuthenticated() || !projectCode || !payload) return false;
     try {
-      const value = JSON.stringify({
+      const value = {
         projectCode,
         totalTokens: payload.totalTokens ?? 0,
         totalPrompts: payload.totalPrompts ?? 0,
         sessionCount: payload.sessionCount ?? 0,
         sessions: payload.sessions ?? [],
         lastUpdated: payload.lastUpdated ?? new Date().toISOString()
-      });
+      };
       await this.client.writeStorageObjects(this.session, [{
         collection: COLLECTION_SESSION_ANALYTICS,
         key: projectCode,
         value,
-        userId: this.session.user_id,
-        permissionRead: 1,
-        permissionWrite: 1
+        permission_read: 1,
+        permission_write: 1
       }]);
       return true;
     } catch (error) {

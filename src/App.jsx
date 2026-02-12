@@ -768,12 +768,12 @@ function App() {
                   fontSize: '0.7rem',
                   marginLeft: '5px'
                 }}
-                title="Sync sessions from file system"
+                title="Sync sessions from file system (local dev only)"
               >
                 🔄 Sync Sessions
               </button>
             )}
-            {isEmailAuthenticated && import.meta.env.DEV && (
+            {isEmailAuthenticated && (
               <button
                 onClick={async () => {
                   if (nakamaService.offlineMode) {
