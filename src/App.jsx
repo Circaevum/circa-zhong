@@ -52,6 +52,7 @@ function App() {
   const [syncStatus, setSyncStatus] = useState('local'); // 'local' | 'synced' | 'syncing' | 'error'
   const [sessionSyncKey, setSessionSyncKey] = useState(0); // Force SessionStats to refresh
   const [pushStatus, setPushStatus] = useState(null); // 'pushing' | 'pushed' | 'error' | null
+  const [cloudSyncKey, setCloudSyncKey] = useState(0); // Increment to force refetch analytics after Cloud Sync
 
   // Initialize from LocalStorage or fall back to default
   // Ensure all projects have projectCode
@@ -430,7 +431,7 @@ function App() {
       if (!cancelled) setSessionStatsByProjectCode(prev => ({ ...prev, ...next }));
     })();
     return () => { cancelled = true; };
-  }, [projectsData, isAuthenticated]);
+  }, [projectsData, isAuthenticated, cloudSyncKey]);
 
   // In dev, merge in session stats from localStorage (cursor_sessions) so dots update right after Sync Sessions
   const localStatsForDots = React.useMemo(() => {
@@ -771,6 +772,37 @@ function App() {
                 title="Sync sessions from file system (local dev only)"
               >
                 🔄 Sync Sessions
+              </button>
+            )}
+            {isEmailAuthenticated && (
+              <button
+                onClick={async () => {
+                  if (nakamaService.offlineMode) return;
+                  setSyncStatus('syncing');
+                  try {
+                    const synced = await nakamaService.syncProjects(projectsData);
+                    setProjectsData(synced);
+                    setCloudSyncKey(k => k + 1);
+                    setSyncStatus('synced');
+                  } catch (e) {
+                    console.error('[App] Cloud sync failed:', e);
+                    setSyncStatus('error');
+                  }
+                }}
+                style={{
+                  background: syncStatus === 'syncing' ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: '#fff',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  cursor: syncStatus === 'syncing' ? 'wait' : 'pointer',
+                  fontSize: '0.7rem',
+                  marginLeft: '5px'
+                }}
+                title="Pull latest projects and session stats from the cloud"
+                disabled={syncStatus === 'syncing' || nakamaService.offlineMode}
+              >
+                {syncStatus === 'syncing' ? '⟳ Syncing...' : '↓ Cloud Sync'}
               </button>
             )}
             {isEmailAuthenticated && (
